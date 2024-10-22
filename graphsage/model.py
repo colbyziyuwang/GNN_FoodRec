@@ -14,6 +14,9 @@ from graphsage.aggregators import MeanAggregator
 
 from tqdm import tqdm
 
+import pandas as pd
+import ast
+
 """
 Simple supervised GraphSAGE model as well as examples running the model
 on the Cora and Pubmed datasets.
@@ -107,6 +110,10 @@ def run_cora():
     print("Validation F1:", f1_score(labels[val], val_output.data.numpy().argmax(axis=1), average="micro"))
     print("Average batch time:", np.mean(times))
 
+    # Save the model
+    torch.save(graphsage.state_dict(), "graphsage_model.pth")
+    print("saved model")
+
 def load_pubmed():
     #hardcoded for simplicity...
     num_nodes = 19717
@@ -179,5 +186,58 @@ def run_pubmed():
     print("Validation F1:", f1_score(labels[val], val_output.data.numpy().argmax(axis=1), average="micro"))
     print("Average batch time:", np.mean(times))
 
+    # Save the model
+    torch.save(graphsage.state_dict(), "graphsage_model.pth")
+    print("saved model")
+
+import pandas as pd
+
+def load_food():
+    # First get the interactions and items files
+
+    # Specify the column types for interactions
+    column_types_inter = {
+        "user_id": int,
+        "item_id": int,
+        "rating": float,
+        "timestamp": float
+    }
+
+    # Load the file and specify the correct delimiter and types
+    food_inter = pd.read_csv(
+        "food-data/Food.inter",
+        delimiter='\t',  # Tab-separated
+        dtype=column_types_inter,
+        header=0  # Use the first row as the header
+    )
+
+    # Specify the column types for food items
+    column_types_item = {
+        "item_id": int,
+        "name": str,
+        "submitted_timestamp": float,
+        "contributor_id": int,
+        "n_steps": float,
+        "minutes": float,
+        "nutrition": str,  # Load as string initially
+        "tags": str  # Load as string initially
+    }
+
+    # Load the CSV
+    food_items = pd.read_csv(
+        "food-data/Food.item",
+        delimiter='\t',  # Specify your delimiter
+        dtype=column_types_item,
+        header=0  # Specify that the first row is the header
+    )
+
+    # Get number of users and items
+    num_users = len(food_inter['user_id:token'].unique())
+    print("number of users is: ", num_users)
+    num_items = len(food_items['item_id:token'].unique())
+    print("number of items: ", num_items)
+
+    return 0
+
 if __name__ == "__main__":
-    run_pubmed()
+    load_food()
