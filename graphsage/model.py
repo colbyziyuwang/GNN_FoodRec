@@ -198,46 +198,22 @@ def load_food():
     # Specify the column types for interactions
     column_types_inter = {
         "user_id": int,
-        "item_id": int,
+        "recipe_id": int,
+        "date": str,
         "rating": float,
-        "timestamp": float
+        "u": int,
+        "i": int
     }
 
     # Load the file and specify the correct delimiter and types
     food_inter = pd.read_csv(
-        "food-data/Food.inter",
-        delimiter='\t',  # Tab-separated
+        "food-data/interactions_train.csv",
+        delimiter=',',  # Comma-separated
         dtype=column_types_inter,
         header=0  # Use the first row as the header
     )
 
-    # Specify the column types for food items
-    column_types_item = {
-        "item_id": int,
-        "name": str,
-        "submitted_timestamp": float,
-        "contributor_id": int,
-        "n_steps": float,
-        "minutes": float,
-        "nutrition": str,  # Load as string initially
-        "tags": str  # Load as string initially
-    }
-
-    # Load the CSV
-    food_items = pd.read_csv(
-        "food-data/Food.item",
-        delimiter='\t',  # Specify your delimiter
-        dtype=column_types_item,
-        header=0  # Specify that the first row is the header
-    )
-
-    # Get number of users and items
-    num_users = len(food_inter['user_id:token'].unique())
-    print("number of users is: ", num_users)
-    num_items = len(food_items['item_id:token'].unique())
-    print("number of items: ", num_items)
-
-    print("max user id", min(food_inter['user_id:token'].unique()))
+    print(food_inter.head())
 
     return 0
 
