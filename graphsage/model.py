@@ -15,7 +15,9 @@ from graphsage.aggregators import MeanAggregator
 from tqdm import tqdm
 
 import pandas as pd
-import ast
+from transformers import pipeline
+import numpy as np
+import pickle
 
 """
 Simple supervised GraphSAGE model as well as examples running the model
@@ -193,27 +195,35 @@ def run_pubmed():
 import pandas as pd
 
 def load_food():
-    # First get the interactions and items files
+    dataset_path = "food-data/"
 
-    # Specify the column types for interactions
-    column_types_inter = {
-        "user_id": int,
-        "recipe_id": int,
-        "date": str,
-        "rating": float,
-        "u": int,
-        "i": int
-    }
+    # Load and analyze interactions_train.csv
+    interactions_train = pd.read_csv(dataset_path + 'interactions_train.csv')
 
-    # Load the file and specify the correct delimiter and types
-    food_inter = pd.read_csv(
-        "food-data/interactions_train.csv",
-        delimiter=',',  # Comma-separated
-        dtype=column_types_inter,
-        header=0  # Use the first row as the header
-    )
+    # Analyze the 'u' and 'i' field (mapped user-ids)
+    print("max user id", max(interactions_train['u'].unique()))
+    print("number of unique user ids", len(interactions_train['u'].unique()))
+    print("max recipe id", max(interactions_train['i'].unique()))
+    print("number of unique recipe ids", len(interactions_train['i'].unique()))
+    print("some recipes are not rated")
 
-    print(food_inter.head())
+    # Load RAW_recipes.csv
+    raw_recipes = pd.read_csv(dataset_path + "RAW_recipes.csv")
+    print(raw_recipes.head())
+
+    # Get recipe embeddings and save to a dict
+    device = torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")
+    embedding_dict = {}
+    embedding = pipeline('feature-extraction', model='alexdseo/RecipeBERT', framework='pt', device=device)
+    for i in tqdm(range(len(raw_recipes)), desc="bert"):
+        food_data = str(raw_recipes['name'][i])
+        food_rep = np.mean(embedding(food_data)[0], axis=0)
+        embedding_dict[raw_recipes['id'][i]] = food_rep
+        
+    with open('food-data/recipe_embeddings.pkl', 'wb') as f:
+        pickle.dump(embedding_dict, f)
+
+    print("Embeddings saved successfully.")
 
     return 0
 
