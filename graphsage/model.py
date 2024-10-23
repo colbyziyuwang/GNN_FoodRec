@@ -237,6 +237,8 @@ def load_food():
     num_items = len(food_items['item_id:token'].unique())
     print("number of items: ", num_items)
 
+    print("max user id", min(food_inter['user_id:token'].unique()))
+
     return 0
 
 if __name__ == "__main__":
