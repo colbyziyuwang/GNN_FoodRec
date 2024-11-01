@@ -18,6 +18,7 @@ import pandas as pd
 from transformers import pipeline
 import numpy as np
 import pickle
+import pandas as pd
 
 """
 Simple supervised GraphSAGE model as well as examples running the model
@@ -192,20 +193,8 @@ def run_pubmed():
     torch.save(graphsage.state_dict(), "graphsage_model.pth")
     print("saved model")
 
-import pandas as pd
-
-def load_food():
+def create_food_embedding():
     dataset_path = "food-data/"
-
-    # Load and analyze interactions_train.csv
-    interactions_train = pd.read_csv(dataset_path + 'interactions_train.csv')
-
-    # Analyze the 'u' and 'i' field (mapped user-ids)
-    print("max user id", max(interactions_train['u'].unique()))
-    print("number of unique user ids", len(interactions_train['u'].unique()))
-    print("max recipe id", max(interactions_train['i'].unique()))
-    print("number of unique recipe ids", len(interactions_train['i'].unique()))
-    print("some recipes are not rated")
 
     # Load RAW_recipes.csv
     raw_recipes = pd.read_csv(dataset_path + "RAW_recipes.csv")
@@ -225,7 +214,50 @@ def load_food():
 
     print("Embeddings saved successfully.")
 
-    return 0
+def load_embedding(filepath):
+    # Load the dictionary
+    with open(filepath, 'rb') as f:
+        embedding_dict = pickle.load(f)
+    print("Embeddings loaded successfully.")
+    return embedding_dict
+
+def retrieve_embedding(embedding_dict, id):
+    # Retrieve embedding for a specific recipe ID
+    if id in embedding_dict:
+        embedding = embedding_dict[id]
+        print("Embedding for ID:", id, "\n", embedding)
+    else:
+        print("ID not found in embeddings.")
+
+def create_user_embedding():
+    # Set dataset path
+    dataset_path = "food-data/"
+
+    # Load and analyze interactions_train.csv
+    interactions_train = pd.read_csv(dataset_path + 'interactions_train.csv')
+
+    # Get the maximum user ID
+    max_user_id = max(interactions_train['u'].unique())
+
+    # Create User Embedding (one-hot encoding)
+    embedding_dict = {}
+    for i in tqdm(range(max_user_id + 1), desc="user"):
+        user_embedding = np.zeros(max_user_id + 1)
+        user_embedding[i] = 1
+        embedding_dict[i] = user_embedding
+        
+    # Save the embedding dictionary to a file
+    with open(dataset_path + 'user_embedding.pkl', 'wb') as f:
+        pickle.dump(embedding_dict, f)
+
+    print("Embeddings saved successfully.")
 
 if __name__ == "__main__":
-    load_food()
+    # create_food_embedding()
+    # create_user_embedding()
+
+    recipe_embedding_dict = load_embedding('food-data/recipe_embeddings.pkl')
+    # retrieve_embedding(recipe_embedding_dict, 4684)
+    user_embedding_dict = load_embedding('food-data/user_embedding.pkl')
+    retrieve_embedding(user_embedding_dict, 0)
+
