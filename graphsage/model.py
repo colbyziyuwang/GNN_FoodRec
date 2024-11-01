@@ -26,14 +26,21 @@ on the Cora and Pubmed datasets.
 """
 
 class SupervisedGraphSage(nn.Module):
-
-    def __init__(self, num_classes, enc):
+    def __init__(self, num_classes, enc, user_dim=25076, recipe_dim=768):
         super(SupervisedGraphSage, self).__init__()
         self.enc = enc
         self.xent = nn.CrossEntropyLoss()
 
         self.weight = nn.Parameter(torch.FloatTensor(num_classes, enc.embed_dim))
         init.xavier_uniform_(self.weight)
+
+        self.user_dim = user_dim
+        self.recipe_dim = recipe_dim
+        self.common_dim = 512
+
+        # Projection layers
+        self.user_project = nn.Linear(user_dim, self.common_dim)  # projects user embedding to common_dim
+        self.recipe_project = nn.Linear(recipe_dim, self.common_dim)  # projects recipe embedding to common_dim
 
     def forward(self, nodes):
         embeds = self.enc(nodes)
@@ -259,5 +266,5 @@ if __name__ == "__main__":
     recipe_embedding_dict = load_embedding('food-data/recipe_embeddings.pkl')
     # retrieve_embedding(recipe_embedding_dict, 4684)
     user_embedding_dict = load_embedding('food-data/user_embedding.pkl')
-    retrieve_embedding(user_embedding_dict, 0)
-
+    # retrieve_embedding(user_embedding_dict, 0)
+    
