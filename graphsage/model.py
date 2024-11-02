@@ -225,16 +225,13 @@ def load_embedding(filepath):
     # Load the dictionary
     with open(filepath, 'rb') as f:
         embedding_dict = pickle.load(f)
-    print("Embeddings loaded successfully.")
     return embedding_dict
 
 def retrieve_embedding(embedding_dict, id):
-    # Retrieve embedding for a specific recipe ID
-    if id in embedding_dict:
-        embedding = embedding_dict[id]
-        print("Embedding for ID:", id, "\n", embedding)
-    else:
-        print("ID not found in embeddings.")
+    # Retrieve embedding for a specific ID
+    embedding = embedding_dict[id]
+    
+    return embedding
 
 def create_user_embedding():
     # Set dataset path
@@ -259,6 +256,69 @@ def create_user_embedding():
 
     print("Embeddings saved successfully.")
 
+# Function to retrieve node ID from the mapping
+def get_node_id(user_or_recipe_id, node_id_mapping):
+    return node_id_mapping.get(user_or_recipe_id)
+
+# Define function to load food embeddings with projection layers
+def load_food(recipe_embedding_dict, user_embedding_dict):    
+    # Load data
+    data = pd.read_csv('food-data/interactions_train.csv')
+
+    # Get unique user and recipe IDs
+    unique_user_ids = data['u'].unique()
+    unique_recipe_ids = data['recipe_id'].unique()
+
+    # Create combined unique IDs and node ID mapping
+    all_ids = list(unique_user_ids) + list(unique_recipe_ids)
+    node_id_mapping = {id_val: idx for idx, id_val in enumerate(all_ids)}
+
+    # Initialize projection layers for users and recipes
+    user_dim = 25076  # Input dimension for user embeddings
+    recipe_dim = 768  # Input dimension for recipe embeddings
+    common_dim = 512  # Target dimension for both projections
+
+    # Initialize the user and recipe projection layers
+    user_project_layer = nn.Linear(user_dim, common_dim, dtype=torch.float32)
+    recipe_project_layer = nn.Linear(recipe_dim, common_dim, dtype=torch.float32)
+
+    # Initialize feature matrix
+    num_nodes = len(all_ids)
+    feat_data = np.zeros((num_nodes, common_dim), dtype=np.float32)
+
+    # Project user embeddings
+    for user_id in tqdm(unique_user_ids, desc="user"):
+        user_embedding = retrieve_embedding(user_embedding_dict, user_id).astype(np.float32)
+        feat_data[get_node_id(user_id, node_id_mapping)] = user_project_layer(
+            torch.tensor(user_embedding)).detach().numpy()
+    
+    # Project recipe embeddings
+    for recipe_id in tqdm(unique_recipe_ids, desc="recipe"):
+        recipe_embedding = retrieve_embedding(recipe_embedding_dict, recipe_id).astype(np.float32)
+        feat_data[get_node_id(recipe_id, node_id_mapping)] = recipe_project_layer(
+            torch.tensor(recipe_embedding)).detach().numpy()
+
+    print("Projected embeddings saved in feat_data.")
+
+    # Build adjacency list and labels
+    adj_lists = defaultdict(set)
+    labels = {}
+    for _, row in data.iterrows():
+        recipe_id = row["recipe_id"]
+        user_id = row["u"]
+        rating = row["rating"]
+
+        node_id1 = get_node_id(recipe_id, node_id_mapping)
+        node_id2 = get_node_id(user_id, node_id_mapping)
+        adj_lists[node_id1].add(node_id2)
+        adj_lists[node_id2].add(node_id1)
+
+        # Create label entries for undirected edges
+        labels[(node_id1, node_id2)] = rating
+        labels[(node_id2, node_id1)] = rating
+
+    return feat_data, user_project_layer, recipe_project_layer, adj_lists, labels
+
 if __name__ == "__main__":
     # create_food_embedding()
     # create_user_embedding()
@@ -267,4 +327,5 @@ if __name__ == "__main__":
     # retrieve_embedding(recipe_embedding_dict, 4684)
     user_embedding_dict = load_embedding('food-data/user_embedding.pkl')
     # retrieve_embedding(user_embedding_dict, 0)
-    
+
+    load_food(recipe_embedding_dict, user_embedding_dict)
