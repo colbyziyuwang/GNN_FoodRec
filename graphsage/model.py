@@ -1,13 +1,10 @@
 import torch
 import torch.nn as nn
-from torch.nn import init
 import torch.nn.functional as F
-from torch.autograd import Variable
+import torch.optim as optim
 
 import numpy as np
-import time
 import random
-from sklearn.metrics import f1_score
 from collections import defaultdict
 
 from graphsage.encoders import Encoder
@@ -49,7 +46,7 @@ class SupervisedGraphSage(nn.Module):
     def max_margin_loss(self, user_embedding, pos_embedding, neg_embedding, low_rank_embedding):
         """
         Parameters:
-        - user_embedding: User embedding (batch of users).
+        - user_embedding: User embedding.
         - pos_embedding: Embedding of high-rated (positive) recipes (4-5).
         - neg_embedding: Embedding of non-interacted (negative) recipes.
         - low_rank_embedding: Embedding of low-rated (low-rank positive) recipes (1-3).
@@ -200,10 +197,10 @@ def load_food(recipe_embedding_dict, user_embedding_dict):
 
     return feat_data, user_project_layer, recipe_project_layer, adj_lists, labels
 
-def run_food():
+def run_food(recipe_embedding_dict, user_embedding_dict):
     np.random.seed(1)
     random.seed(1)
-    feat_data, user_project_layer, recipe_project_layer, adj_lists, labels = load_food()
+    feat_data, user_project_layer, recipe_project_layer, adj_lists, labels = load_food(recipe_embedding_dict, user_embedding_dict)
     num_nodes = feat_data.shape[0]
     features = nn.Embedding(num_nodes, 512)
     features.weight = nn.Parameter(torch.FloatTensor(feat_data), requires_grad=False)
@@ -212,20 +209,83 @@ def run_food():
     agg1 = MeanAggregator(features, cuda=True)
     enc1 = Encoder(features, 512, 128, adj_lists, agg1, gcn=True, cuda=False)
     agg2 = MeanAggregator(lambda nodes : enc1(nodes).t(), cuda=False)
-    enc2 = Encoder(lambda nodes : enc1(nodes).t(), enc1.embed_dim, 128, adj_lists, agg2,
-            base_model=enc1, gcn=True, cuda=False)
+    enc2 = Encoder(lambda nodes : enc1(nodes).t(), enc1.embed_dim, 128, adj_lists,
+                   agg2, base_model=enc1, gcn=True, cuda=False)
     enc1.num_samples = 5
     enc2.num_samples = 5
 
     graphsage = SupervisedGraphSage(enc2, user_project_layer, recipe_project_layer)
+    optimizer = optim.SGD(graphsage.parameters(), lr=0.001)
+    
+    # Load data
+    data = pd.read_csv('food-data/interactions_train.csv')
+
+    # Get unique user and recipe IDs
+    unique_user_ids = data['u'].unique()
+    unique_recipe_ids = data['recipe_id'].unique()
+
+    # Create combined unique IDs and node ID mapping
+    all_ids = list(unique_user_ids) + list(unique_recipe_ids)
+    node_id_mapping = {id_val: idx for idx, id_val in enumerate(all_ids)}
+
+    # Aggregate loss for each user
+    batch_size = 256
+    for batch in tqdm(range(100), desc="train"):
+        optimizer.zero_grad()
+
+        # Sample a batch of users
+        batch_users = random.sample(list(unique_user_ids), 
+                                    min(batch_size, len(unique_user_ids)))
+
+        # Initialize total loss
+        loss = 0.0
+
+        for user in tqdm(batch_users, desc="user train"):
+            # Map user ID to node ID
+            mapped_user_id = get_node_id(user, node_id_mapping)
+            user_embedding = feat_data[mapped_user_id]
+
+            # Get connected recipe IDs for the user
+            recipe_mapped_ids = adj_lists[mapped_user_id]
+
+            # Get positive recipe embeddings (ratings >= 4)
+            pos_embedding = feat_data[[get_node_id(recipe, node_id_mapping) 
+                                    for recipe in recipe_mapped_ids 
+                                    if labels[(mapped_user_id, recipe)] >= 4]]
+
+            # Get low-rank positive recipe embeddings (ratings 1-3)
+            low_rank_embedding = feat_data[[get_node_id(recipe, node_id_mapping) 
+                                            for recipe in recipe_mapped_ids 
+                                            if 1 <= labels[(mapped_user_id, recipe)] <= 3]]
+
+            # Sample negative recipe IDs that are not interacted with by the user
+            negative_recipe_ids = [recipe_id for recipe_id in unique_recipe_ids 
+                                if (mapped_user_id, get_node_id(recipe_id)) not in labels]
+
+            # Ensure there are enough negative samples to choose from
+            if len(negative_recipe_ids) > 0:
+                sampled_negative_ids = random.sample(negative_recipe_ids, min(16, len
+                (negative_recipe_ids)))
+                neg_embedding = feat_data[[get_node_id(neg_id, node_id_mapping) for neg_id in sampled_negative_ids]]
+            else:
+                continue  # Skip if no valid negative samples are available
+
+            # Compute max-margin loss
+            loss += graphsage.max_margin_loss(user_embedding, pos_embedding, 
+                                            neg_embedding, low_rank_embedding)
+
+        # Backpropagation
+        loss.backward()
+        optimizer.step()
+
+        print(f"Batch {batch}, Loss: {loss.item()}")
+    
+    # Save the model
+    torch.save(graphsage.state_dict(), "graphsage_model.pth")
+    print("saved model")
 
 if __name__ == "__main__":
-    # create_food_embedding()
-    # create_user_embedding()
-
+    # Get embedding and run training
     recipe_embedding_dict = load_embedding('food-data/recipe_embeddings.pkl')
-    # retrieve_embedding(recipe_embedding_dict, 4684)
     user_embedding_dict = load_embedding('food-data/user_embedding.pkl')
-    # retrieve_embedding(user_embedding_dict, 0)
-
-    load_food(recipe_embedding_dict, user_embedding_dict)
+    run_food(recipe_embedding_dict, user_embedding_dict)
