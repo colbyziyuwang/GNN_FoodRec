@@ -200,6 +200,25 @@ def load_food(recipe_embedding_dict, user_embedding_dict):
 
     return feat_data, user_project_layer, recipe_project_layer, adj_lists, labels
 
+def run_food():
+    np.random.seed(1)
+    random.seed(1)
+    feat_data, user_project_layer, recipe_project_layer, adj_lists, labels = load_food()
+    num_nodes = feat_data.shape[0]
+    features = nn.Embedding(num_nodes, 512)
+    features.weight = nn.Parameter(torch.FloatTensor(feat_data), requires_grad=False)
+   # features.cuda()
+
+    agg1 = MeanAggregator(features, cuda=True)
+    enc1 = Encoder(features, 512, 128, adj_lists, agg1, gcn=True, cuda=False)
+    agg2 = MeanAggregator(lambda nodes : enc1(nodes).t(), cuda=False)
+    enc2 = Encoder(lambda nodes : enc1(nodes).t(), enc1.embed_dim, 128, adj_lists, agg2,
+            base_model=enc1, gcn=True, cuda=False)
+    enc1.num_samples = 5
+    enc2.num_samples = 5
+
+    graphsage = SupervisedGraphSage(enc2, user_project_layer, recipe_project_layer)
+
 if __name__ == "__main__":
     # create_food_embedding()
     # create_user_embedding()
