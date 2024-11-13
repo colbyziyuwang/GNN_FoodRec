@@ -249,18 +249,31 @@ def run_food(recipe_embedding_dict, user_embedding_dict):
             recipe_mapped_ids = adj_lists[mapped_user_id]
 
             # Get positive recipe embeddings (ratings >= 4)
-            pos_embedding = feat_data[[get_node_id(recipe, node_id_mapping) 
-                                    for recipe in recipe_mapped_ids 
-                                    if labels[(mapped_user_id, recipe)] >= 4]]
+            pos_recipe_ids = [get_node_id(recipe, node_id_mapping) 
+                            for recipe in recipe_mapped_ids 
+                            if labels.get((mapped_user_id, recipe)) is not None and labels[(mapped_user_id, recipe)] >= 4]
+            pos_recipe_ids = [id_ for id_ in pos_recipe_ids if id_ is not None]  # Filter out None values
+
+            if pos_recipe_ids:
+                pos_embedding = feat_data[pos_recipe_ids]
+            else:
+                continue  # Skip to the next user if no valid positive samples
+
 
             # Get low-rank positive recipe embeddings (ratings 1-3)
-            low_rank_embedding = feat_data[[get_node_id(recipe, node_id_mapping) 
-                                            for recipe in recipe_mapped_ids 
-                                            if 1 <= labels[(mapped_user_id, recipe)] <= 3]]
+            low_rank_recipe_ids = [get_node_id(recipe, node_id_mapping) 
+                                for recipe in recipe_mapped_ids 
+                                if labels.get((mapped_user_id, recipe)) is not None and 1 <= labels[(mapped_user_id, recipe)] <= 3]
+            low_rank_recipe_ids = [id_ for id_ in low_rank_recipe_ids if id_ is not None]  # Filter out None values
+
+            if low_rank_recipe_ids:
+                low_rank_embedding = feat_data[low_rank_recipe_ids]
+            else:
+                continue  # Skip to the next user if no valid low-rank samples
 
             # Sample negative recipe IDs that are not interacted with by the user
             negative_recipe_ids = [recipe_id for recipe_id in unique_recipe_ids 
-                                if (mapped_user_id, get_node_id(recipe_id)) not in labels]
+                                if (mapped_user_id, get_node_id(recipe_id, node_id_mapping)) not in labels]
 
             # Ensure there are enough negative samples to choose from
             if len(negative_recipe_ids) > 0:
