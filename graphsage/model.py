@@ -66,6 +66,12 @@ class SupervisedGraphSage(nn.Module):
         """
         total_loss = 0
 
+        # Convert all inputs to PyTorch tensors
+        user_embedding = torch.tensor(user_embedding, dtype=torch.float32, requires_grad=True)
+        pos_embeddings = torch.tensor(pos_embeddings, dtype=torch.float32, requires_grad=True)
+        neg_embeddings = torch.tensor(neg_embeddings, dtype=torch.float32, requires_grad=True)
+        low_rank_embeddings = torch.tensor(low_rank_embeddings, dtype=torch.float32, requires_grad=True)
+
         # Compute the loss for each positive embedding
         for pos_embedding in pos_embeddings:
             # Compute positive interaction score and normalize it to 0-1
