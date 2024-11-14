@@ -49,47 +49,47 @@ class SupervisedGraphSage(nn.Module):
         self.delta_n=1.0
         self.delta_l=0.5
 
-def max_margin_loss(self, user_embedding, pos_embeddings, neg_embeddings, low_rank_embeddings):
-    """
-    Parameters:
-    - user_embedding: Single user embedding.
-    - pos_embeddings: Batch of embeddings of high-rated (positive) recipes.
-    - neg_embeddings: Batch of embeddings of non-interacted (negative) recipes.
-    - low_rank_embeddings: Batch of embeddings of low-rated (low-rank positive) recipes.
-    - alpha_n: Weight for negative term in loss.
-    - alpha_l: Weight for low-rank positive term in loss.
-    - delta_n: Margin for negative term.
-    - delta_l: Margin for low-rank positive term.
+    def max_margin_loss(self, user_embedding, pos_embeddings, neg_embeddings, low_rank_embeddings):
+        """
+        Parameters:
+        - user_embedding: Single user embedding.
+        - pos_embeddings: Batch of embeddings of high-rated (positive) recipes.
+        - neg_embeddings: Batch of embeddings of non-interacted (negative) recipes.
+        - low_rank_embeddings: Batch of embeddings of low-rated (low-rank positive) recipes.
+        - alpha_n: Weight for negative term in loss.
+        - alpha_l: Weight for low-rank positive term in loss.
+        - delta_n: Margin for negative term.
+        - delta_l: Margin for low-rank positive term.
 
-    Returns:
-    - Max-margin loss with low-rank positive augmentation.
-    """
-    total_loss = 0
+        Returns:
+        - Max-margin loss with low-rank positive augmentation.
+        """
+        total_loss = 0
 
-    # Compute the loss for each positive embedding
-    for pos_embedding in pos_embeddings:
-        # Compute positive interaction score and normalize it to 0-1
-        pos_score = torch.sigmoid(torch.sum(user_embedding * pos_embedding, dim=0))
+        # Compute the loss for each positive embedding
+        for pos_embedding in pos_embeddings:
+            # Compute positive interaction score and normalize it to 0-1
+            pos_score = torch.sigmoid(torch.sum(user_embedding * pos_embedding, dim=0))
 
-        # Select a random negative embedding and low-rank embedding for each positive
-        neg_embedding = neg_embeddings[torch.randint(0, len(neg_embeddings), (1,)).item()]
-        low_rank_embedding = low_rank_embeddings[torch.randint(0, len(low_rank_embeddings), (1,)).item()]
+            # Select a random negative embedding and low-rank embedding for each positive
+            neg_embedding = neg_embeddings[torch.randint(0, len(neg_embeddings), (1,)).item()]
+            low_rank_embedding = low_rank_embeddings[torch.randint(0, len(low_rank_embeddings), (1,)).item()]
 
-        # Compute negative and low-rank positive interaction scores and normalize them to 0-1
-        neg_score = torch.sigmoid(torch.sum(user_embedding * neg_embedding, dim=0))
-        low_rank_score = torch.sigmoid(torch.sum(user_embedding * low_rank_embedding, dim=0))
+            # Compute negative and low-rank positive interaction scores and normalize them to 0-1
+            neg_score = torch.sigmoid(torch.sum(user_embedding * neg_embedding, dim=0))
+            low_rank_score = torch.sigmoid(torch.sum(user_embedding * low_rank_embedding, dim=0))
 
-        # Max-margin loss for negatives
-        neg_loss = F.relu(-pos_score + neg_score + self.delta_n)
+            # Max-margin loss for negatives
+            neg_loss = F.relu(-pos_score + neg_score + self.delta_n)
 
-        # Max-margin loss for low-rank positives
-        low_rank_loss = F.relu(-pos_score + low_rank_score + self.delta_l)
+            # Max-margin loss for low-rank positives
+            low_rank_loss = F.relu(-pos_score + low_rank_score + self.delta_l)
 
-        # Add the weighted losses to the total loss
-        total_loss += self.alpha_n * neg_loss + self.alpha_l * low_rank_loss
+            # Add the weighted losses to the total loss
+            total_loss += self.alpha_n * neg_loss + self.alpha_l * low_rank_loss
 
-    # Return the mean loss over all positive embeddings
-    return total_loss / len(pos_embeddings)
+        # Return the mean loss over all positive embeddings
+        return total_loss / len(pos_embeddings)
 
 def create_food_embedding():
     dataset_path = "food-data/"
