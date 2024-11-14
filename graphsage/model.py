@@ -82,8 +82,8 @@ class SupervisedGraphSage(nn.Module):
             low_rank_embedding = low_rank_embeddings[torch.randint(0, len(low_rank_embeddings), (1,)).item()]
 
             # Compute negative and low-rank positive interaction scores and normalize them to 0-1
-            neg_score = torch.sigmoid(torch.sum(user_embedding * neg_embedding, dim=0))
-            low_rank_score = torch.sigmoid(torch.sum(user_embedding * low_rank_embedding, dim=0))
+            neg_score = torch.sigmoid(torch.sum(self.enc(user_embedding) * self.enc(neg_embedding), dim=0))
+            low_rank_score = torch.sigmoid(torch.sum(self.enc(user_embedding) * self.enc(low_rank_embedding), dim=0))
 
             # Max-margin loss for negatives
             neg_loss = F.relu(-pos_score + neg_score + self.delta_n)
@@ -95,7 +95,7 @@ class SupervisedGraphSage(nn.Module):
             total_loss += self.alpha_n * neg_loss + self.alpha_l * low_rank_loss
 
         # Return the mean loss over all positive embeddings
-        return total_loss / len(pos_embeddings)
+        return total_loss.mean() / len(pos_embeddings)
 
 def create_food_embedding():
     dataset_path = "food-data/"
