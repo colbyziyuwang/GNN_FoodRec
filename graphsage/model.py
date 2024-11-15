@@ -316,8 +316,22 @@ def run_food(recipe_embedding_dict, user_embedding_dict):
         print(f"Batch {batch}, Loss: {loss.item()}")
     
     # Save the model
-    torch.save(graphsage.state_dict(), "graphsage_model.pth")
-    print("saved model")
+    # torch.save(graphsage.state_dict(), "graphsage_model.pth")
+    # print("saved model")
+
+    # Open a file to save embeddings incrementally in binary format
+    with open("graphsage_embeddings.npy", "wb") as f:
+        for node_id in tqdm(range(len(feat_data)), desc="Saving embeddings"):
+            # Encode the embedding using the model's encoder
+            encoded_embedding = graphsage.enc(torch.tensor(feat_data[node_id]))
+
+            # Detach and convert to NumPy array for saving
+            encoded_array = encoded_embedding.detach().numpy()
+
+            # Save each embedding incrementally to the file
+            np.save(f, encoded_array)
+
+    print("Embeddings saved successfully.")
 
 if __name__ == "__main__":
     # Get embedding and run training
