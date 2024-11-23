@@ -45,7 +45,7 @@ class MeanAggregator(nn.Module):
 
         if self.gcn:
             samp_neighs = [samp_neigh + set([nodes[i]]) for i, samp_neigh in enumerate(samp_neighs)]
-        unique_nodes_list = list(set.union(*samp_neighs))
+        unique_nodes_list = list(set().union(*samp_neighs))
         unique_nodes = {n:i for i,n in enumerate(unique_nodes_list)}
         mask = Variable(torch.zeros(len(samp_neighs), len(unique_nodes)))
         column_indices = [unique_nodes[n] for samp_neigh in samp_neighs for n in samp_neigh]   

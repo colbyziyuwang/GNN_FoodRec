@@ -10,20 +10,32 @@ interact = pd.read_csv("food-data/merged_recipes_interactions.csv")
 with open('food-data/recipe_embeddings.pkl', 'rb') as f:
     recipe_embeddings = pickle.load(f)
 
-# Create user embeddings by averaging recipe embeddings
+# Create user embeddings using weighted averaging
 user_embeddings = {}
 
 for user_id in tqdm(interact['user_id'].unique(), desc="Creating User Embeddings"):
-    # Get all recipe IDs rated by the user
-    user_recipes = interact[interact['user_id'] == user_id]['recipe_id']
+    # Get all interactions for the user
+    user_data = interact[interact['user_id'] == user_id]
+
+    # Get recipe IDs and corresponding ratings
+    user_recipes = user_data['recipe_id']
+    user_ratings = user_data['rating'] + 1
 
     # Fetch the embeddings for these recipes
-    recipe_embs = [recipe_embeddings[recipe_id] for recipe_id in user_recipes if recipe_id in recipe_embeddings]
+    recipe_embs = [
+        recipe_embeddings[recipe_id]
+        for recipe_id in user_recipes
+        if recipe_id in recipe_embeddings
+    ]
 
-    # Aggregate embeddings (e.g., mean pooling)
+    # Use ratings as weights
     if recipe_embs:
         recipe_embs = np.array(recipe_embs)
-        user_embedding = recipe_embs.mean(axis=0)  # Mean pooling across all recipe embeddings
+        ratings = user_ratings.values
+
+        # Normalize ratings to sum to 1 for weighted averaging
+        weights = ratings / ratings.sum()
+        user_embedding = np.average(recipe_embs, axis=0, weights=weights)
         user_embeddings[user_id] = user_embedding
 
 # Save user embeddings to a pickle file

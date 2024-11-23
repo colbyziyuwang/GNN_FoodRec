@@ -18,10 +18,10 @@ def get_top_k_ids(k=50):
     - top_k_idx: A dictionary mapping each user ID to the indices of their top-k recipes.
     """
     # Load interaction data
-    data = pd.read_csv('food-data/interactions_train.csv')
+    data = pd.read_csv('food-data/merged_recipes_interactions.csv')
 
     # Get unique user and recipe IDs
-    unique_user_ids = data['u'].unique()
+    unique_user_ids = data['user_id'].unique()
     unique_recipe_ids = data['recipe_id'].unique()
 
     # Create combined unique IDs and mappings
