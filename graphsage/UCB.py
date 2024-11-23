@@ -44,8 +44,11 @@ def load_embedding_from_zip(zipf, node_id):
     Load an embedding for a specific node ID from the ZIP file.
     """
     embedding_filename = f"embedding_{node_id}.npy"
-    with zipf.open(embedding_filename) as file:
-        return np.load(file)
+    try:
+        with zipf.open(embedding_filename) as file:
+            return np.load(file)
+    except KeyError:
+        raise ValueError(f"Embedding for node ID {node_id} not found in ZIP file.")
 
 # Load interaction data
 data = pd.read_csv('food-data/merged_recipes_interactions.csv')
@@ -63,19 +66,25 @@ zip_path = "graphsage_embeddings.zip"
 zipf = zipfile.ZipFile(zip_path, 'r')
 
 # Initialize LinUCB
-num_actions = 6  # Ratings 0 to 5
-feature_dim = 768 * 2  # Concatenated user and recipe embeddings
+num_actions = 2  # Recommend or not recommend (0 means not recommend)
+feature_dim = 128 * 2  # Concatenated user and recipe embeddings
 alpha = 1.0  # Exploration parameter
 linucb = LinUCB(num_actions, feature_dim, alpha)
 
-# Sample 10,000 random rows from the dataset
-sampled_data = data.sample(n=10000, random_state=42)
+# Sample 80% random rows from the dataset
+num_train = int(len(data) * 0.80)  # Ensure it's an integer
+sampled_data = data.sample(n=num_train, random_state=42)
 
 # Training Loop
 for _, row in tqdm(sampled_data.iterrows(), desc="Training LinUCB", total=len(sampled_data)):
     user_id = row['user_id']
     recipe_id = row['recipe_id']
-    rating = int(row['rating'])  # Reward (integer between 0 and 5)
+    rating = row['rating']  # Reward (integer between 0 and 5)
+
+    # Validate and preprocess rating
+    if not (0 <= rating <= 5):
+        raise ValueError(f"Unexpected rating value: {rating}")
+    rating = int(rating)  # Ensure integer type
 
     # Get embeddings
     user_embedding = load_embedding_from_zip(zipf, node_id_mapping[user_id])
@@ -85,8 +94,11 @@ for _, row in tqdm(sampled_data.iterrows(), desc="Training LinUCB", total=len(sa
     # Select an action
     chosen_action = linucb.select_action(state_vector)
 
+    # Define target action
+    target_action = 1 if rating >= 4 else 0  # Recommend if rating >= 4
+
     # Observe reward
-    observed_reward = 1 if chosen_action == rating else 0  # Binary reward
+    observed_reward = 1 if chosen_action == target_action else 0  # Binary reward
 
     # Update LinUCB model
     linucb.update(chosen_action, state_vector, observed_reward)
