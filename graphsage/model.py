@@ -167,10 +167,10 @@ def run_food(recipe_embedding_dict, user_embedding_dict):
     
     # Create dataset and dataloader
     dataset = InteractionDataset(data,  node_id_mapping)
-    dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
+    dataloader = DataLoader(dataset, batch_size=256, shuffle=True)
 
     # Training loop
-    num_epochs = 10
+    num_epochs = 20
     for epoch in range(num_epochs):
         epoch_loss = 0
         for batch_user_nodes, batch_recipe_nodes, batch_ratings in tqdm(dataloader, desc=f"Epoch {epoch + 1}/{num_epochs}"):
