@@ -15,7 +15,7 @@ class LinUCB:
         self.A = [np.identity(feature_dim) for _ in range(num_actions)]
         self.b = [np.zeros((feature_dim, 1)) for _ in range(num_actions)]
 
-    def select_action(self, state_vector):
+    def select_action(self, state_vector, return_val=False):
         """
         Selects an action based on the LinUCB algorithm.
         """
@@ -29,6 +29,9 @@ class LinUCB:
             p = (state_vector.T @ theta_hat)[0, 0] + self.alpha * np.sqrt((state_vector.T @ A_inv @ state_vector)[0, 0])
             p_values.append(p)
 
+        if (return_val == True): # return array of p_values
+            return p_values
+        
         return np.argmax(p_values)
 
     def update(self, action, state_vector, reward):
@@ -79,7 +82,7 @@ sampled_data = data.sample(n=num_train, random_state=42)
 for _, row in tqdm(sampled_data.iterrows(), desc="Training LinUCB", total=len(sampled_data)):
     user_id = row['user_id']
     recipe_id = row['recipe_id']
-    rating = row['rating']  # Reward (integer between 0 and 5)
+    rating = row['rating']
 
     # Validate and preprocess rating
     if not (0 <= rating <= 5):
