@@ -10,9 +10,11 @@ import numpy as np
 from metrics import precision_at_k, recall_at_k, ndcg_at_k, hit_rate_at_k
 
 if __name__ == "__main__":
-    # Load model
     linucb = LinUCB(num_actions=2, feature_dim=128*2)
-    linucb = pickle.load('linucb_model.pkl')
+
+    # Load the LinUCB model from a file
+    with open('linucb_model.pkl', 'rb') as f:
+        linucb = pickle.load(f)
 
     # Get top-k ids
     k = 50
