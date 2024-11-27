@@ -73,6 +73,41 @@ if __name__ == "__main__":
     # Output results
     print(f"Accuracy: {accuracy:.4f}")
 
+    # Initialize counters
+    true_positives = 0
+    false_positives = 0
+    false_negatives = 0
+
+    for _, row in tqdm(test_data.iterrows(), desc="Evaluating Metrics", total=len(test_data)):
+        user_id = row['user_id']
+        recipe_id = row['recipe_id']
+        target_action = 1 if row['rating'] >= 4 else 0  # Target action: recommend (1) or not (0)
+
+        # Get embeddings
+        user_embedding = load_embedding_from_zip(zipf, node_id_mapping[user_id])
+        recipe_embedding = load_embedding_from_zip(zipf, node_id_mapping[recipe_id])
+        state_vector = np.concatenate([user_embedding, recipe_embedding])
+
+        # Predict action using LinUCB
+        predicted_action = linucb.select_action(state_vector)
+
+        # Update metrics
+        if predicted_action == 1:  # Model predicts "recommend"
+            if target_action == 1:
+                true_positives += 1  # Correctly predicted recommendation
+            else:
+                false_positives += 1  # Incorrectly predicted recommendation
+        elif target_action == 1:  # Model predicts "not recommend" but ground truth is "recommend"
+            false_negatives += 1
+
+    # Compute precision and recall
+    precision = true_positives / (true_positives + false_positives) if (true_positives + false_positives) > 0 else 0
+    recall = true_positives / (true_positives + false_negatives) if (true_positives + false_negatives) > 0 else 0
+
+    # Output results
+    print(f"Precision: {precision:.4f}")
+    print(f"Recall: {recall:.4f}")
+
     # # Obtain ranks
     # sorted_recipes = {}  # Dictionary to store sorted recipes for each user
 
