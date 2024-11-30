@@ -40,7 +40,7 @@ if __name__ == "__main__":
     sampled_data = data.sample(n=num_train, random_state=42)
     num_test = int(len(data) * 0.20)
     test_data = data.drop(sampled_data.index)  # Test data is the rest
-    test_data = test_data.sample(n=100, random_state=42)
+    # test_data = test_data.sample(n=100, random_state=42)
 
     # Evaluate accuracy for test pairs
     correct_predictions = 0
