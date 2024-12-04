@@ -12,4 +12,5 @@ Currently, only supervised versions of GraphSAGE-mean and GraphSAGE-GCN are impl
 
 pytorch >0.2 is required.
 
+#### Note
 This Repo is used to implement a recipe recommender system.
