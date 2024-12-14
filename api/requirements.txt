@@ -1,0 +1,10 @@
+Flask==3.1.0
+langchain==0.3.12
+langchain_community==0.3.11
+numpy==2.2.0
+pandas==2.2.3
+scikit_learn==1.6.0
+torch==2.6.0.dev20241213+cu118
+tqdm==4.63.0
+transformers==4.47.0
+accelerate==1.2.1
