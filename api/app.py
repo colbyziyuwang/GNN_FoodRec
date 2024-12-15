@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template_string
 import sys
 import os
 sys.path.append(os.path.abspath("../graphsage"))
@@ -38,47 +38,77 @@ def load_embedding(node_id):
             return np.load(file)
     except KeyError:
         return None
-    
-def preload_embeddings(unique_ids, zip_file):
-    embedding_cache = {}
-    for node_id in unique_ids:
-        try:
-            embedding_cache[node_id] = load_embedding(node_id)
-        except KeyError:
-            embedding_cache[node_id] = None  # Handle missing embeddings
-    return embedding_cache
 
-all_embeddings = preload_embeddings(all_ids, zipf)
-top_k = 10
-
-def load_cached_embedding(node_id):
-    return all_embeddings.get(node_id)
+@app.route("/")
+def home():
+    """
+    Render a simple HTML form for user input.
+    """
+    html_template = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Recipe Recommendation</title>
+    </head>
+    <body>
+        <h1>Recipe Recommendation System</h1>
+        <form action="/recommend" method="post">
+            <label for="user_id">User ID (optional):</label><br>
+            <input type="text" id="user_id" name="user_id"><br><br>
+            
+            <label for="preferences">Preferences:</label><br>
+            <textarea id="preferences" name="preferences" rows="4" cols="50" placeholder="E.g., Vegan, likes spicy food"></textarea><br><br>
+            
+            <label for="method">Recommendation Method:</label><br>
+            <select id="method" name="method">
+                <option value="similarity">Similarity (LLM)</option>
+                <option value="thompson">Thompson Sampling</option>
+                <option value="linucb">LinUCB</option>
+            </select><br><br>
+            
+            <button type="submit">Get Recommendations</button>
+        </form>
+    </body>
+    </html>
+    """
+    return render_template_string(html_template)
 
 @app.route("/recommend", methods=["POST"])
 def recommend():
     """
-    API Endpoint: Recommend recipes based on user preferences.
-    Input: JSON { "user_id": Optional[int], "preferences": str, "method": str }
-    Output: JSON { "recommendations": [str], "description": str, "metrics": {...} }
+    Handle recommendation logic and return HTML with results.
     """
-    user_req = request.get_json()
-    user_id = user_req.get("user_id")
-    preferences = user_req.get("preferences", "")
-    method = user_req.get("method", "similarity") #default to llm if no other model provided
+    user_id = request.form.get("user_id", type=int)
+    preferences = request.form.get("preferences", "")
+    method = request.form.get("method", "similarity")
 
+    # Fetch past recipes and ratings for the user
+    past_recipes_html = ""
     if user_id:
         if user_id not in node_id_mapping:
-            return jsonify({"error": "User not found"}), 404
-        user_embedding = load_cached_embedding(node_id_mapping[user_id])
+            return "<p>Error: User not found.</p>", 404
+
+        user_embedding = load_embedding(node_id_mapping[user_id])
         if user_embedding is None:
-            return jsonify({"error": "User embedding not found"}), 404
+            return "<p>Error: User embedding not found.</p>", 404
+
+        # Fetch the user's past recipes and ratings
+        user_history = data[data["user_id"] == user_id][["name", "rating"]]
+        if not user_history.empty:
+            past_recipes_html = "<h3>Past Recipes and Ratings:</h3><ul>"
+            for _, row in user_history.iterrows():
+                past_recipes_html += f"<li>{row['name']} - Rating: {row['rating']}</li>"
+            past_recipes_html += "</ul>"
+        else:
+            past_recipes_html = "<p>No past recipes found for this user.</p>"
     else:
-        user_embedding = np.random.rand(128)  #random embedding since it's necessary for calculation on non-llm cases
+        user_embedding = np.random.rand(128)  # Random embedding for non-LLM methods
+        past_recipes_html = "<p>User ID not provided. No past recipes to show.</p>"
 
     if method == "similarity":
         # Step 1: Retrieve top 10 recipes by similarity
         recipe_embeddings = [
-            load_cached_embedding(node_id_mapping[recipe_id]) for recipe_id in unique_recipe_ids
+            load_embedding(node_id_mapping[recipe_id]) for recipe_id in unique_recipe_ids
         ]
         recipe_embeddings = np.array([emb for emb in recipe_embeddings if emb is not None])
         valid_recipe_ids = [recipe_id for recipe_id, emb in zip(unique_recipe_ids, recipe_embeddings) if emb is not None]
@@ -92,7 +122,7 @@ def recommend():
 
         # Ensure distinct recipe names
         recommended_recipes = data[data["recipe_id"].isin(top_10_recipe_ids)]
-        top_10_recipes = list(set(recommended_recipes["name"].tolist()))  # Deduplicate names
+        top_10_recipes = list(set(recommended_recipes["name"].tolist()))
 
         # Step 2: Use LLM to select the best recipe with justification
         if top_10_recipes:
@@ -116,40 +146,41 @@ def recommend():
             "accuracy": accuracy_score(relevance, [1] * len(relevance)) if relevance else 0,
         }
 
-        return jsonify({
-            "recommendations": top_10_recipes,
-            "llm_recommendation": llm_response,
-            "metrics": metrics
-        })
-    elif method == "thompson":
-        top_k = 10
-        recipe_embeddings = [
-            load_cached_embedding(node_id_mapping[recipe_id]) for recipe_id in unique_recipe_ids[:top_k * 10]
-        ]
-        recipe_embeddings = np.array([emb for emb in recipe_embeddings if emb is not None])
-        valid_recipe_ids = [recipe_id for recipe_id, emb in zip(unique_recipe_ids, recipe_embeddings) if emb is not None]
+        return f"""
+        <!DOCTYPE html>
+        <html>
+        <body>
+            <h2>Similarity (LLM) Recommendations</h2>
+            <p><strong>LLM Recommendation:</strong> {llm_response}</p>
+            <p><strong>Top 10 Recipes:</strong> {", ".join(top_10_recipes)}</p>
+            {past_recipes_html}
+        </body>
+        </html>
+        """
 
+    elif method == "thompson":
+        # Thompson Sampling-based recommendation
+        top_k = 10
         predictions, ground_truth = [], []
 
-        for idx, recipe_id in enumerate(valid_recipe_ids):
-            predicted_action = thompson_bandit.select_action()
-            target_action = 1 if data.loc[data["recipe_id"] == recipe_id, "rating"].mean() >= 4 else 0
-            predictions.append(predicted_action)
-            ground_truth.append(target_action)
-            reward = 1 if predicted_action == target_action else 0
-            thompson_bandit.update(predicted_action, reward)
+        for recipe_id in unique_recipe_ids[:top_k * 10]:
+            recipe_embedding = load_embedding(node_id_mapping[recipe_id])
+            if recipe_embedding is not None:
+                predicted_action = thompson_bandit.select_action()
+                target_action = 1 if data.loc[data["recipe_id"] == recipe_id, "rating"].mean() >= 4 else 0
+                predictions.append(predicted_action)
+                ground_truth.append(target_action)
+                reward = 1 if predicted_action == target_action else 0
+                thompson_bandit.update(predicted_action, reward)
 
-        recommended_recipe_ids = [recipe_id for idx, recipe_id in enumerate(valid_recipe_ids) if predictions[idx] == 1]
+        recommended_recipe_ids = [
+            recipe_id for idx, recipe_id in enumerate(unique_recipe_ids[:top_k * 10]) if predictions[idx] == 1
+        ]
         recommended_recipes = data[data["recipe_id"].isin(recommended_recipe_ids)]
         top_recipe_names = list(set(recommended_recipes["name"].tolist()))
 
         relevance = ground_truth[:len(recommended_recipe_ids)]
         predicted_scores = predictions[:len(recommended_recipe_ids)]
-
-        if len(relevance) != len(predicted_scores):
-            print("Debugging Mismatch (Thompson):")
-            print("Relevance Length:", len(relevance))
-            print("Predicted Scores Length:", len(predicted_scores))
 
         metrics = {
             "ndcg": ndcg_score([relevance], [predicted_scores]) if relevance and predicted_scores else 0,
@@ -164,39 +195,41 @@ def recommend():
             else "Thompson Sampling couldn't find any suitable recommendations."
         )
 
-        return jsonify({"recommendations": top_recipe_names, "description": description, "metrics": metrics})
-
+        return f"""
+        <!DOCTYPE html>
+        <html>
+        <body>
+            <h2>Thompson Sampling Recommendations</h2>
+            <p><strong>Recommendations:</strong> {", ".join(top_recipe_names[:5])}</p>
+            {past_recipes_html}
+        </body>
+        </html>
+        """
 
     elif method == "linucb":
+        # LinUCB-based recommendation
         top_k = 10
-        recipe_embeddings = [
-            load_cached_embedding(node_id_mapping[recipe_id]) for recipe_id in unique_recipe_ids[:top_k * 10]
-        ]
-        recipe_embeddings = np.array([emb for emb in recipe_embeddings if emb is not None])
-        valid_recipe_ids = [recipe_id for recipe_id, emb in zip(unique_recipe_ids, recipe_embeddings) if emb is not None]
-
         predictions, ground_truth = [], []
 
-        for idx, recipe_id in enumerate(valid_recipe_ids):
-            state_vector = np.concatenate([user_embedding, recipe_embeddings[idx]])
-            predicted_action = linucb.select_action(state_vector)
-            target_action = 1 if data.loc[data["recipe_id"] == recipe_id, "rating"].mean() >= 4 else 0
-            predictions.append(predicted_action)
-            ground_truth.append(target_action)
-            reward = 1 if predicted_action == target_action else 0
-            linucb.update(predicted_action, state_vector, reward)
+        for recipe_id in unique_recipe_ids[:top_k * 10]:
+            recipe_embedding = load_embedding(node_id_mapping[recipe_id])
+            if recipe_embedding is not None:
+                state_vector = np.concatenate([user_embedding, recipe_embedding])
+                predicted_action = linucb.select_action(state_vector)
+                target_action = 1 if data.loc[data["recipe_id"] == recipe_id, "rating"].mean() >= 4 else 0
+                predictions.append(predicted_action)
+                ground_truth.append(target_action)
+                reward = 1 if predicted_action == target_action else 0
+                linucb.update(predicted_action, state_vector, reward)
 
-        recommended_recipe_ids = [recipe_id for idx, recipe_id in enumerate(valid_recipe_ids) if predictions[idx] == 1]
+        recommended_recipe_ids = [
+            recipe_id for idx, recipe_id in enumerate(unique_recipe_ids[:top_k * 10]) if predictions[idx] == 1
+        ]
         recommended_recipes = data[data["recipe_id"].isin(recommended_recipe_ids)]
         top_recipe_names = list(set(recommended_recipes["name"].tolist()))
 
         relevance = ground_truth[:len(recommended_recipe_ids)]
         predicted_scores = predictions[:len(recommended_recipe_ids)]
-
-        if len(relevance) != len(predicted_scores):
-            print("Debugging Mismatch (LinUCB):")
-            print("Relevance Length:", len(relevance))
-            print("Predicted Scores Length:", len(predicted_scores))
 
         metrics = {
             "ndcg": ndcg_score([relevance], [predicted_scores]) if relevance and predicted_scores else 0,
@@ -211,11 +244,19 @@ def recommend():
             else "LinUCB couldn't find any suitable recommendations."
         )
 
-        return jsonify({"recommendations": top_recipe_names, "description": description, "metrics": metrics})
-
+        return f"""
+        <!DOCTYPE html>
+        <html>
+        <body>
+            <h2>LinUCB Recommendations</h2>
+            <p><strong>Recommendations:</strong> {", ".join(top_recipe_names[:5])}</p>
+            {past_recipes_html}
+        </body>
+        </html>
+        """
 
     else:
-        return jsonify({"error": "Invalid method specified"}), 400
+        return "<p>Error: Invalid method specified.</p>", 400
 
 
 if __name__ == "__main__":
