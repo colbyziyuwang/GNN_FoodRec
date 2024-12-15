@@ -76,33 +76,38 @@ def recommend():
         user_embedding = np.random.rand(128)  #random embedding since it's necessary for calculation on non-llm cases
 
     if method == "similarity":
-        recipe_embeddings = [load_cached_embedding(node_id_mapping[recipe_id]) for recipe_id in unique_recipe_ids]
+        # Step 1: Retrieve top 10 recipes by similarity
+        recipe_embeddings = [
+            load_cached_embedding(node_id_mapping[recipe_id]) for recipe_id in unique_recipe_ids
+        ]
         recipe_embeddings = np.array([emb for emb in recipe_embeddings if emb is not None])
         valid_recipe_ids = [recipe_id for recipe_id, emb in zip(unique_recipe_ids, recipe_embeddings) if emb is not None]
 
         user_embedding = user_embedding.reshape(1, -1)
-        similarities = np.dot(recipe_embeddings, user_embedding.T).flatten() 
+        similarities = np.dot(recipe_embeddings, user_embedding.T).flatten()
 
-        top_k = 10
-        top_indices = np.argsort(similarities)[-top_k:][::-1]
-        top_recipe_ids = [valid_recipe_ids[i] for i in top_indices]
-        top_recipe_scores = [similarities[i] for i in top_indices]
+        # Sort by similarity and take the top 10
+        top_10_indices = np.argsort(similarities)[-10:][::-1]
+        top_10_recipe_ids = [valid_recipe_ids[i] for i in top_10_indices]
 
-        recommended_recipes = data[data["recipe_id"].isin(top_recipe_ids)]
-        top_recipe_names = list(set(recommended_recipes["name"].tolist()))
+        # Ensure distinct recipe names
+        recommended_recipes = data[data["recipe_id"].isin(top_10_recipe_ids)]
+        top_10_recipes = list(set(recommended_recipes["name"].tolist()))  # Deduplicate names
 
+        # Step 2: Use LLM to select the best recipe with justification
+        if top_10_recipes:
+            llm_response = generate_recommendations(preferences, top_10_recipes)
+        else:
+            llm_response = "No suitable recipes found."
+
+        # Step 3: Metrics (optional, calculated for top-10 similarity-based recommendations)
         ground_truth_ratings = [
             recommended_recipes.loc[recommended_recipes["recipe_id"] == recipe_id, "rating"].values[0]
-            for recipe_id in top_recipe_ids
+            for recipe_id in top_10_recipe_ids
             if recipe_id in recommended_recipes["recipe_id"].values
         ]
         relevance = [1 if rating >= 4 else 0 for rating in ground_truth_ratings]
-        predicted_scores = top_recipe_scores[:len(relevance)]  
-
-        if len(relevance) != len(predicted_scores):
-            print("Debugging Mismatch:")
-            print("Relevance Length:", len(relevance))
-            print("Predicted Scores Length:", len(predicted_scores))
+        predicted_scores = [similarities[i] for i in top_10_indices[:len(relevance)]]  # Match lengths
 
         metrics = {
             "ndcg": ndcg_score([relevance], [predicted_scores]) if relevance and predicted_scores else 0,
@@ -111,14 +116,11 @@ def recommend():
             "accuracy": accuracy_score(relevance, [1] * len(relevance)) if relevance else 0,
         }
 
-        description = (
-            generate_recommendations(preferences, top_recipe_names)
-            if top_recipe_names
-            else "We couldn't find any suitable recommendations based on similarity."
-        )
-
-        return jsonify({"recommendations": top_recipe_names, "description": description, "metrics": metrics})
-
+        return jsonify({
+            "recommendations": top_10_recipes,
+            "llm_recommendation": llm_response,
+            "metrics": metrics
+        })
     elif method == "thompson":
         top_k = 10
         recipe_embeddings = [
